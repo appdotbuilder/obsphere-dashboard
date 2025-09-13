@@ -5,13 +5,13 @@ export const obsInstanceSchema = z.object({
   id: z.number(),
   name: z.string(),
   websocket_url: z.string().url(),
-  is_connected: z.boolean(),
+  profile_name: z.string().nullable(),
+  stream_key: z.string().nullable(),
+  status: z.enum(['connected', 'disconnected', 'error']),
   current_scene: z.string().nullable(),
   is_streaming: z.boolean(),
-  stream_key: z.string().nullable(),
-  profile_name: z.string().nullable(),
   created_at: z.coerce.date(),
-  updated_at: z.coerce.date(),
+  updated_at: z.coerce.date()
 });
 
 export type ObsInstance = z.infer<typeof obsInstanceSchema>;
@@ -20,8 +20,8 @@ export type ObsInstance = z.infer<typeof obsInstanceSchema>;
 export const createObsInstanceInputSchema = z.object({
   name: z.string().min(1),
   websocket_url: z.string().url(),
-  stream_key: z.string().nullable().optional(),
   profile_name: z.string().nullable().optional(),
+  stream_key: z.string().nullable().optional()
 });
 
 export type CreateObsInstanceInput = z.infer<typeof createObsInstanceInputSchema>;
@@ -29,58 +29,57 @@ export type CreateObsInstanceInput = z.infer<typeof createObsInstanceInputSchema
 // Input schema for updating OBS instances
 export const updateObsInstanceInputSchema = z.object({
   id: z.number(),
-  name: z.string().optional(),
+  name: z.string().min(1).optional(),
   websocket_url: z.string().url().optional(),
-  is_connected: z.boolean().optional(),
-  current_scene: z.string().nullable().optional(),
-  is_streaming: z.boolean().optional(),
-  stream_key: z.string().nullable().optional(),
   profile_name: z.string().nullable().optional(),
+  stream_key: z.string().nullable().optional(),
+  status: z.enum(['connected', 'disconnected', 'error']).optional(),
+  current_scene: z.string().nullable().optional(),
+  is_streaming: z.boolean().optional()
 });
 
 export type UpdateObsInstanceInput = z.infer<typeof updateObsInstanceInputSchema>;
 
-// OBS Source schema
-export const obsSourceSchema = z.object({
+// Scene schema
+export const sceneSchema = z.object({
   id: z.number(),
   obs_instance_id: z.number(),
+  name: z.string(),
+  is_active: z.boolean(),
+  created_at: z.coerce.date(),
+  updated_at: z.coerce.date()
+});
+
+export type Scene = z.infer<typeof sceneSchema>;
+
+// Source schema
+export const sourceSchema = z.object({
+  id: z.number(),
+  scene_id: z.number(),
   name: z.string(),
   type: z.string(),
-  enabled: z.boolean(),
-  scene_name: z.string(),
+  is_enabled: z.boolean(),
+  settings: z.record(z.any()).nullable(), // JSON object for source settings
   created_at: z.coerce.date(),
-  updated_at: z.coerce.date(),
+  updated_at: z.coerce.date()
 });
 
-export type ObsSource = z.infer<typeof obsSourceSchema>;
-
-// OBS Scene schema
-export const obsSceneSchema = z.object({
-  id: z.number(),
-  obs_instance_id: z.number(),
-  name: z.string(),
-  is_current: z.boolean(),
-  created_at: z.coerce.date(),
-  updated_at: z.coerce.date(),
-});
-
-export type ObsScene = z.infer<typeof obsSceneSchema>;
+export type Source = z.infer<typeof sourceSchema>;
 
 // Schedule schema
 export const scheduleSchema = z.object({
   id: z.number(),
   name: z.string(),
   obs_instance_id: z.number(),
-  start_time: z.coerce.date(),
-  end_time: z.coerce.date(),
+  start_time: z.string(), // Time in HH:MM format
+  end_time: z.string(), // Time in HH:MM format
+  days_of_week: z.array(z.number().min(0).max(6)), // 0=Sunday, 1=Monday, etc.
   is_active: z.boolean(),
-  stream_key: z.string().nullable(),
-  profile_name: z.string().nullable(),
-  video_start_position: z.number().nullable(), // in seconds
-  repeat_type: z.enum(['once', 'daily', 'weekly']),
-  repeat_days: z.array(z.number()).nullable(), // 0-6 for Sunday-Saturday
+  is_one_time: z.boolean(),
+  execution_date: z.coerce.date().nullable(), // For one-time schedules
+  video_start_timestamp: z.number().nullable(), // Seconds from start of video
   created_at: z.coerce.date(),
-  updated_at: z.coerce.date(),
+  updated_at: z.coerce.date()
 });
 
 export type Schedule = z.infer<typeof scheduleSchema>;
@@ -89,13 +88,12 @@ export type Schedule = z.infer<typeof scheduleSchema>;
 export const createScheduleInputSchema = z.object({
   name: z.string().min(1),
   obs_instance_id: z.number(),
-  start_time: z.coerce.date(),
-  end_time: z.coerce.date(),
-  stream_key: z.string().nullable().optional(),
-  profile_name: z.string().nullable().optional(),
-  video_start_position: z.number().nullable().optional(),
-  repeat_type: z.enum(['once', 'daily', 'weekly']).default('once'),
-  repeat_days: z.array(z.number().min(0).max(6)).nullable().optional(),
+  start_time: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/), // HH:MM format
+  end_time: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/), // HH:MM format
+  days_of_week: z.array(z.number().min(0).max(6)),
+  is_one_time: z.boolean().optional(),
+  execution_date: z.coerce.date().nullable().optional(),
+  video_start_timestamp: z.number().nullable().optional()
 });
 
 export type CreateScheduleInput = z.infer<typeof createScheduleInputSchema>;
@@ -103,105 +101,86 @@ export type CreateScheduleInput = z.infer<typeof createScheduleInputSchema>;
 // Input schema for updating schedules
 export const updateScheduleInputSchema = z.object({
   id: z.number(),
-  name: z.string().optional(),
-  obs_instance_id: z.number().optional(),
-  start_time: z.coerce.date().optional(),
-  end_time: z.coerce.date().optional(),
+  name: z.string().min(1).optional(),
+  start_time: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(),
+  end_time: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(),
+  days_of_week: z.array(z.number().min(0).max(6)).optional(),
   is_active: z.boolean().optional(),
-  stream_key: z.string().nullable().optional(),
-  profile_name: z.string().nullable().optional(),
-  video_start_position: z.number().nullable().optional(),
-  repeat_type: z.enum(['once', 'daily', 'weekly']).optional(),
-  repeat_days: z.array(z.number().min(0).max(6)).nullable().optional(),
+  is_one_time: z.boolean().optional(),
+  execution_date: z.coerce.date().nullable().optional(),
+  video_start_timestamp: z.number().nullable().optional()
 });
 
 export type UpdateScheduleInput = z.infer<typeof updateScheduleInputSchema>;
 
-// Day Schedule schema for saving/loading entire day schedules
-export const dayScheduleSchema = z.object({
+// Stream event schema for history tracking
+export const streamEventSchema = z.object({
   id: z.number(),
-  name: z.string(), // e.g., "Monday Schedule"
-  schedule_data: z.string(), // JSON stringified schedule data
-  created_at: z.coerce.date(),
-  updated_at: z.coerce.date(),
+  obs_instance_id: z.number(),
+  schedule_id: z.number().nullable(),
+  event_type: z.enum(['stream_start', 'stream_stop', 'manual_start', 'manual_stop']),
+  occurred_at: z.coerce.date(),
+  notes: z.string().nullable()
 });
 
-export type DaySchedule = z.infer<typeof dayScheduleSchema>;
+export type StreamEvent = z.infer<typeof streamEventSchema>;
 
-// Input schema for creating day schedules
-export const createDayScheduleInputSchema = z.object({
-  name: z.string().min(1),
-  schedule_data: z.string(),
+// Input schema for creating stream events
+export const createStreamEventInputSchema = z.object({
+  obs_instance_id: z.number(),
+  schedule_id: z.number().nullable().optional(),
+  event_type: z.enum(['stream_start', 'stream_stop', 'manual_start', 'manual_stop']),
+  notes: z.string().nullable().optional()
 });
 
-export type CreateDayScheduleInput = z.infer<typeof createDayScheduleInputSchema>;
+export type CreateStreamEventInput = z.infer<typeof createStreamEventInputSchema>;
 
-// Notification Log schema
-export const notificationLogSchema = z.object({
+// Notification schema
+export const notificationSchema = z.object({
   id: z.number(),
   schedule_id: z.number(),
-  notification_type: z.enum(['pre_start', 'start', 'pre_stop', 'stop']),
+  notification_type: z.enum(['pre_stream', 'stream_start', 'stream_stop']),
   message: z.string(),
-  sent_at: z.coerce.date(),
-  telegram_sent: z.boolean(),
-  created_at: z.coerce.date(),
+  sent_at: z.coerce.date().nullable(),
+  created_at: z.coerce.date()
 });
 
-export type NotificationLog = z.infer<typeof notificationLogSchema>;
+export type Notification = z.infer<typeof notificationSchema>;
 
-// User session schema (simple auth)
-export const userSessionSchema = z.object({
-  id: z.number(),
-  username: z.string(),
-  session_token: z.string(),
-  expires_at: z.coerce.date(),
-  created_at: z.coerce.date(),
-});
-
-export type UserSession = z.infer<typeof userSessionSchema>;
-
-// Auth input schemas
-export const loginInputSchema = z.object({
-  username: z.string(),
-  password: z.string(),
-});
-
-export type LoginInput = z.infer<typeof loginInputSchema>;
-
-// OBS Control input schemas
-export const obsControlInputSchema = z.object({
-  obs_instance_id: z.number(),
-  action: z.enum(['start_stream', 'stop_stream', 'switch_scene', 'toggle_source']),
-  scene_name: z.string().optional(),
-  source_name: z.string().optional(),
-});
-
-export type ObsControlInput = z.infer<typeof obsControlInputSchema>;
-
-// Schedule preview schema
+// Schedule preview schema for showing changes before applying
 export const schedulePreviewSchema = z.object({
-  affected_streams: z.array(z.object({
-    obs_instance_id: z.number(),
+  affected_streams: z.array(z.string()),
+  new_timings: z.array(z.object({
     obs_instance_name: z.string(),
-    current_schedule: z.string().nullable(),
-    new_schedule: z.string(),
+    start_time: z.string(),
+    end_time: z.string()
   })),
-  conflicts: z.array(z.object({
-    schedule_id: z.number(),
-    conflict_description: z.string(),
-    suggested_resolution: z.string(),
-  })),
-  total_changes: z.number(),
+  conflicts: z.array(z.string())
 });
 
 export type SchedulePreview = z.infer<typeof schedulePreviewSchema>;
 
-// Bulk schedule operation input
-export const bulkScheduleOperationInputSchema = z.object({
-  operation: z.enum(['apply', 'copy', 'delete']),
-  source_schedule_ids: z.array(z.number()).optional(),
-  target_date: z.coerce.date().optional(),
-  schedule_data: z.array(createScheduleInputSchema).optional(),
+// Control command schema for manual OBS control
+export const controlCommandInputSchema = z.object({
+  obs_instance_id: z.number(),
+  command: z.enum(['start_stream', 'stop_stream', 'switch_scene', 'toggle_source']),
+  parameters: z.record(z.any()).optional() // Additional parameters for the command
 });
 
-export type BulkScheduleOperationInput = z.infer<typeof bulkScheduleOperationInputSchema>;
+export type ControlCommandInput = z.infer<typeof controlCommandInputSchema>;
+
+// Authentication schema
+export const authInputSchema = z.object({
+  username: z.string(),
+  password: z.string()
+});
+
+export type AuthInput = z.infer<typeof authInputSchema>;
+
+// Common response schemas
+export const successResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string().optional()
+});
+
+export type SuccessResponse = z.infer<typeof successResponseSchema>;

@@ -7,34 +7,84 @@ import { z } from 'zod';
 
 // Import schemas
 import {
+  authInputSchema,
   createObsInstanceInputSchema,
   updateObsInstanceInputSchema,
-  obsControlInputSchema,
   createScheduleInputSchema,
   updateScheduleInputSchema,
-  bulkScheduleOperationInputSchema,
-  createDayScheduleInputSchema,
-  loginInputSchema,
+  createStreamEventInputSchema,
+  controlCommandInputSchema
 } from './schema';
 
 // Import handlers
-import { createObsInstance } from './handlers/create_obs_instance';
-import { getObsInstances } from './handlers/get_obs_instances';
-import { updateObsInstance } from './handlers/update_obs_instance';
-import { deleteObsInstance } from './handlers/delete_obs_instance';
-import { getObsSourcesAndScenes } from './handlers/get_obs_sources_and_scenes';
-import { obsControl } from './handlers/obs_control';
-import { createSchedule } from './handlers/create_schedule';
-import { getSchedules, getActiveSchedules } from './handlers/get_schedules';
-import { updateSchedule } from './handlers/update_schedule';
-import { deleteSchedule } from './handlers/delete_schedule';
-import { generateSchedulePreview } from './handlers/schedule_preview';
-import { performBulkScheduleOperation } from './handlers/bulk_schedule_operations';
-import { saveDaySchedule, getDaySchedules, loadDaySchedule } from './handlers/day_schedule_management';
-import { sendTelegramNotification, getNotificationLogs, processScheduleNotifications } from './handlers/notification_system';
-import { login, validateSession, logout } from './handlers/auth';
-import { getStreamStatus, getAllStreamStatuses, setVideoStartPosition } from './handlers/stream_monitoring';
-import { executeScheduledStart, executeScheduledStop, processActiveSchedules, cancelScheduleExecution } from './handlers/schedule_executor';
+import { authenticate } from './handlers/auth';
+import {
+  createObsInstance,
+  getObsInstances,
+  getObsInstanceById,
+  updateObsInstance,
+  deleteObsInstance,
+  testObsConnection
+} from './handlers/obs_instances';
+import {
+  getScenesByObsInstance,
+  refreshScenesFromObs,
+  switchScene
+} from './handlers/scenes';
+import {
+  getSourcesByScene,
+  refreshSourcesFromObs,
+  toggleSource,
+  updateSourceTimestamp,
+  getSourceProgress
+} from './handlers/sources';
+import {
+  createSchedule,
+  getSchedules,
+  getScheduleById,
+  updateSchedule,
+  deleteSchedule,
+  copySchedule,
+  previewScheduleChanges,
+  applyScheduleChanges,
+  getUpcomingSchedules
+} from './handlers/schedules';
+import {
+  createStreamEvent,
+  getStreamEvents,
+  getStreamEventsByDateRange,
+  getStreamStatistics
+} from './handlers/stream_events';
+import {
+  startStream,
+  stopStream,
+  executeControlCommand,
+  getStreamingStatus,
+  getAllStreamingStatus
+} from './handlers/streaming_control';
+import {
+  createNotification,
+  sendTelegramNotification,
+  getPendingNotifications,
+  generateScheduleNotifications,
+  sendPreStreamNotifications,
+  formatNotificationMessage
+} from './handlers/notifications';
+import {
+  initializeScheduler,
+  scheduleStream,
+  unscheduleStream,
+  executeScheduledStart,
+  executeScheduledStop,
+  getNextScheduledEvent,
+  validateScheduleConflicts,
+  calculateNextExecution
+} from './handlers/scheduler';
+import {
+  makeYouTubeStreamPublic,
+  getYouTubeStreamStatus,
+  updateYouTubeStreamMetadata
+} from './handlers/youtube_integration';
 
 const t = initTRPC.create({
   transformer: superjson,
@@ -49,18 +99,10 @@ const appRouter = router({
     return { status: 'ok', timestamp: new Date().toISOString() };
   }),
 
-  // Authentication routes
-  login: publicProcedure
-    .input(loginInputSchema)
-    .mutation(({ input }) => login(input)),
-
-  validateSession: publicProcedure
-    .input(z.object({ token: z.string() }))
-    .query(({ input }) => validateSession(input.token)),
-
-  logout: publicProcedure
-    .input(z.object({ token: z.string() }))
-    .mutation(({ input }) => logout(input.token)),
+  // Authentication
+  authenticate: publicProcedure
+    .input(authInputSchema)
+    .mutation(({ input }) => authenticate(input)),
 
   // OBS Instance Management
   createObsInstance: publicProcedure
@@ -70,6 +112,10 @@ const appRouter = router({
   getObsInstances: publicProcedure
     .query(() => getObsInstances()),
 
+  getObsInstanceById: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(({ input }) => getObsInstanceById(input.id)),
+
   updateObsInstance: publicProcedure
     .input(updateObsInstanceInputSchema)
     .mutation(({ input }) => updateObsInstance(input)),
@@ -78,14 +124,43 @@ const appRouter = router({
     .input(z.object({ id: z.number() }))
     .mutation(({ input }) => deleteObsInstance(input.id)),
 
-  getObsSourcesAndScenes: publicProcedure
-    .input(z.object({ obsInstanceId: z.number() }))
-    .query(({ input }) => getObsSourcesAndScenes(input.obsInstanceId)),
+  testObsConnection: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ input }) => testObsConnection(input.id)),
 
-  // OBS Control
-  obsControl: publicProcedure
-    .input(obsControlInputSchema)
-    .mutation(({ input }) => obsControl(input)),
+  // Scene Management
+  getScenesByObsInstance: publicProcedure
+    .input(z.object({ obsInstanceId: z.number() }))
+    .query(({ input }) => getScenesByObsInstance(input.obsInstanceId)),
+
+  refreshScenesFromObs: publicProcedure
+    .input(z.object({ obsInstanceId: z.number() }))
+    .mutation(({ input }) => refreshScenesFromObs(input.obsInstanceId)),
+
+  switchScene: publicProcedure
+    .input(z.object({ obsInstanceId: z.number(), sceneName: z.string() }))
+    .mutation(({ input }) => switchScene(input.obsInstanceId, input.sceneName)),
+
+  // Source Management
+  getSourcesByScene: publicProcedure
+    .input(z.object({ sceneId: z.number() }))
+    .query(({ input }) => getSourcesByScene(input.sceneId)),
+
+  refreshSourcesFromObs: publicProcedure
+    .input(z.object({ obsInstanceId: z.number() }))
+    .mutation(({ input }) => refreshSourcesFromObs(input.obsInstanceId)),
+
+  toggleSource: publicProcedure
+    .input(z.object({ sourceId: z.number() }))
+    .mutation(({ input }) => toggleSource(input.sourceId)),
+
+  updateSourceTimestamp: publicProcedure
+    .input(z.object({ sourceId: z.number(), timestamp: z.number() }))
+    .mutation(({ input }) => updateSourceTimestamp(input.sourceId, input.timestamp)),
+
+  getSourceProgress: publicProcedure
+    .input(z.object({ sourceId: z.number() }))
+    .query(({ input }) => getSourceProgress(input.sourceId)),
 
   // Schedule Management
   createSchedule: publicProcedure
@@ -93,11 +168,11 @@ const appRouter = router({
     .mutation(({ input }) => createSchedule(input)),
 
   getSchedules: publicProcedure
-    .input(z.object({ date: z.coerce.date().optional() }).optional())
-    .query(({ input }) => getSchedules(input?.date)),
+    .query(() => getSchedules()),
 
-  getActiveSchedules: publicProcedure
-    .query(() => getActiveSchedules()),
+  getScheduleById: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(({ input }) => getScheduleById(input.id)),
 
   updateSchedule: publicProcedure
     .input(updateScheduleInputSchema)
@@ -107,60 +182,113 @@ const appRouter = router({
     .input(z.object({ id: z.number() }))
     .mutation(({ input }) => deleteSchedule(input.id)),
 
-  // Schedule Preview and Bulk Operations
-  generateSchedulePreview: publicProcedure
-    .input(bulkScheduleOperationInputSchema)
-    .query(({ input }) => generateSchedulePreview(input)),
+  copySchedule: publicProcedure
+    .input(z.object({ id: z.number(), newName: z.string() }))
+    .mutation(({ input }) => copySchedule(input.id, input.newName)),
 
-  performBulkScheduleOperation: publicProcedure
-    .input(bulkScheduleOperationInputSchema)
-    .mutation(({ input }) => performBulkScheduleOperation(input)),
+  previewScheduleChanges: publicProcedure
+    .input(z.object({ schedules: z.array(createScheduleInputSchema) }))
+    .mutation(({ input }) => previewScheduleChanges(input.schedules)),
 
-  // Day Schedule Management
-  saveDaySchedule: publicProcedure
-    .input(createDayScheduleInputSchema)
-    .mutation(({ input }) => saveDaySchedule(input)),
+  applyScheduleChanges: publicProcedure
+    .input(z.object({ schedules: z.array(createScheduleInputSchema), confirmed: z.boolean() }))
+    .mutation(({ input }) => applyScheduleChanges(input.schedules, input.confirmed)),
 
-  getDaySchedules: publicProcedure
-    .query(() => getDaySchedules()),
+  getUpcomingSchedules: publicProcedure
+    .input(z.object({ limit: z.number().optional() }))
+    .query(({ input }) => getUpcomingSchedules(input.limit)),
 
-  loadDaySchedule: publicProcedure
-    .input(z.object({ id: z.number(), targetDate: z.coerce.date() }))
-    .mutation(({ input }) => loadDaySchedule(input.id, input.targetDate)),
+  // Stream Events & History
+  createStreamEvent: publicProcedure
+    .input(createStreamEventInputSchema)
+    .mutation(({ input }) => createStreamEvent(input)),
 
-  // Notification System
-  sendTelegramNotification: publicProcedure
+  getStreamEvents: publicProcedure
+    .input(z.object({ obsInstanceId: z.number().optional(), limit: z.number().optional() }))
+    .query(({ input }) => getStreamEvents(input.obsInstanceId, input.limit)),
+
+  getStreamEventsByDateRange: publicProcedure
     .input(z.object({
-      message: z.string(),
-      scheduleId: z.number(),
-      type: z.enum(['pre_start', 'start', 'pre_stop', 'stop'])
+      startDate: z.coerce.date(),
+      endDate: z.coerce.date(),
+      obsInstanceId: z.number().optional()
     }))
-    .mutation(({ input }) => sendTelegramNotification(input.message, input.scheduleId, input.type)),
+    .query(({ input }) => getStreamEventsByDateRange(input.startDate, input.endDate, input.obsInstanceId)),
 
-  getNotificationLogs: publicProcedure
-    .input(z.object({ scheduleId: z.number().optional() }).optional())
-    .query(({ input }) => getNotificationLogs(input?.scheduleId)),
+  getStreamStatistics: publicProcedure
+    .input(z.object({ obsInstanceId: z.number().optional() }))
+    .query(({ input }) => getStreamStatistics(input.obsInstanceId)),
 
-  processScheduleNotifications: publicProcedure
-    .mutation(() => processScheduleNotifications()),
+  // Streaming Control
+  startStream: publicProcedure
+    .input(z.object({ obsInstanceId: z.number(), manual: z.boolean().optional() }))
+    .mutation(({ input }) => startStream(input.obsInstanceId, input.manual)),
 
-  // Stream Monitoring
-  getStreamStatus: publicProcedure
+  stopStream: publicProcedure
+    .input(z.object({ obsInstanceId: z.number(), manual: z.boolean().optional() }))
+    .mutation(({ input }) => stopStream(input.obsInstanceId, input.manual)),
+
+  executeControlCommand: publicProcedure
+    .input(controlCommandInputSchema)
+    .mutation(({ input }) => executeControlCommand(input)),
+
+  getStreamingStatus: publicProcedure
     .input(z.object({ obsInstanceId: z.number() }))
-    .query(({ input }) => getStreamStatus(input.obsInstanceId)),
+    .query(({ input }) => getStreamingStatus(input.obsInstanceId)),
 
-  getAllStreamStatuses: publicProcedure
-    .query(() => getAllStreamStatuses()),
+  getAllStreamingStatus: publicProcedure
+    .query(() => getAllStreamingStatus()),
 
-  setVideoStartPosition: publicProcedure
+  // Notifications
+  createNotification: publicProcedure
     .input(z.object({
-      obsInstanceId: z.number(),
-      sourceName: z.string(),
-      position: z.number()
+      scheduleId: z.number(),
+      type: z.enum(['pre_stream', 'stream_start', 'stream_stop']),
+      message: z.string()
     }))
-    .mutation(({ input }) => setVideoStartPosition(input.obsInstanceId, input.sourceName, input.position)),
+    .mutation(({ input }) => createNotification(input.scheduleId, input.type, input.message)),
 
-  // Schedule Execution
+  sendTelegramNotification: publicProcedure
+    .input(z.object({ notificationId: z.number() }))
+    .mutation(({ input }) => sendTelegramNotification(input.notificationId)),
+
+  getPendingNotifications: publicProcedure
+    .query(() => getPendingNotifications()),
+
+  generateScheduleNotifications: publicProcedure
+    .input(z.object({ scheduleId: z.number() }))
+    .mutation(({ input }) => generateScheduleNotifications(input.scheduleId)),
+
+  sendPreStreamNotifications: publicProcedure
+    .mutation(() => sendPreStreamNotifications()),
+
+  formatNotificationMessage: publicProcedure
+    .input(z.object({
+      eventType: z.enum(['pre_stream', 'stream_start', 'stream_stop']),
+      currentStream: z.object({
+        name: z.string(),
+        start_time: z.string(),
+        end_time: z.string()
+      }),
+      nextStream: z.object({
+        name: z.string(),
+        start_time: z.string()
+      }).optional()
+    }))
+    .query(({ input }) => formatNotificationMessage(input.eventType, input.currentStream, input.nextStream)),
+
+  // Scheduler
+  initializeScheduler: publicProcedure
+    .mutation(() => initializeScheduler()),
+
+  scheduleStream: publicProcedure
+    .input(z.object({ schedule: z.any() })) // Using z.any() for complex Schedule type
+    .mutation(({ input }) => scheduleStream(input.schedule)),
+
+  unscheduleStream: publicProcedure
+    .input(z.object({ scheduleId: z.number() }))
+    .mutation(({ input }) => unscheduleStream(input.scheduleId)),
+
   executeScheduledStart: publicProcedure
     .input(z.object({ scheduleId: z.number() }))
     .mutation(({ input }) => executeScheduledStart(input.scheduleId)),
@@ -169,12 +297,36 @@ const appRouter = router({
     .input(z.object({ scheduleId: z.number() }))
     .mutation(({ input }) => executeScheduledStop(input.scheduleId)),
 
-  processActiveSchedules: publicProcedure
-    .mutation(() => processActiveSchedules()),
+  getNextScheduledEvent: publicProcedure
+    .query(() => getNextScheduledEvent()),
 
-  cancelScheduleExecution: publicProcedure
-    .input(z.object({ scheduleId: z.number() }))
-    .mutation(({ input }) => cancelScheduleExecution(input.scheduleId)),
+  validateScheduleConflicts: publicProcedure
+    .input(z.object({ schedules: z.array(z.any()) })) // Using z.any() for complex Schedule type
+    .query(({ input }) => validateScheduleConflicts(input.schedules)),
+
+  calculateNextExecution: publicProcedure
+    .input(z.object({ schedule: z.any() })) // Using z.any() for complex Schedule type
+    .query(({ input }) => calculateNextExecution(input.schedule)),
+
+  // YouTube Integration
+  makeYouTubeStreamPublic: publicProcedure
+    .input(z.object({ streamKey: z.string() }))
+    .mutation(({ input }) => makeYouTubeStreamPublic(input.streamKey)),
+
+  getYouTubeStreamStatus: publicProcedure
+    .input(z.object({ streamKey: z.string() }))
+    .query(({ input }) => getYouTubeStreamStatus(input.streamKey)),
+
+  updateYouTubeStreamMetadata: publicProcedure
+    .input(z.object({
+      streamKey: z.string(),
+      metadata: z.object({
+        title: z.string().optional(),
+        description: z.string().optional(),
+        tags: z.array(z.string()).optional()
+      })
+    }))
+    .mutation(({ input }) => updateYouTubeStreamMetadata(input.streamKey, input.metadata))
 });
 
 export type AppRouter = typeof appRouter;
@@ -190,20 +342,18 @@ async function start() {
       return {};
     },
   });
-  
+
+  // Initialize the scheduler on server start
+  try {
+    await initializeScheduler();
+    console.log('Scheduler initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize scheduler:', error);
+  }
+
   server.listen(port);
   console.log(`StreamPilot TRPC server listening at port: ${port}`);
-  console.log('Ready to manage OBS instances and streaming schedules');
-  
-  // Start background processes
-  setInterval(async () => {
-    try {
-      await processActiveSchedules();
-      await processScheduleNotifications();
-    } catch (error) {
-      console.error('Background process error:', error);
-    }
-  }, 30000); // Run every 30 seconds
+  console.log('Server ready to manage OBS instances and streaming schedules');
 }
 
 start();

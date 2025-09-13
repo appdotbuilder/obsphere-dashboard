@@ -1,61 +1,71 @@
-import { 
-    type CreateObsInstanceInput, 
-    type UpdateObsInstanceInput, 
-    type ObsInstance 
-} from '../schema';
+import { type CreateObsInstanceInput, type UpdateObsInstanceInput, type ObsInstance } from '../schema';
 
-export const getObsInstances = async (): Promise<ObsInstance[]> => {
+export async function createObsInstance(input: CreateObsInstanceInput): Promise<ObsInstance> {
     // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is fetching all configured OBS instances
-    // and checking their connection status via WebSocket ping.
+    // The goal of this handler is to create a new OBS instance in the database
+    // and attempt to connect to it via WebSocket to verify connectivity.
+    
+    return {
+        id: 0, // Placeholder ID
+        name: input.name,
+        websocket_url: input.websocket_url,
+        profile_name: input.profile_name || null,
+        stream_key: input.stream_key || null,
+        status: 'disconnected', // Initial status
+        current_scene: null,
+        is_streaming: false,
+        created_at: new Date(),
+        updated_at: new Date()
+    } as ObsInstance;
+}
+
+export async function getObsInstances(): Promise<ObsInstance[]> {
+    // This is a placeholder declaration! Real code should be implemented here.
+    // The goal of this handler is to fetch all OBS instances from the database
+    // with their current connection status and streaming state.
+    
     return [];
 }
 
-export const createObsInstance = async (input: CreateObsInstanceInput): Promise<ObsInstance> => {
+export async function getObsInstanceById(id: number): Promise<ObsInstance | null> {
     // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is creating a new OBS instance configuration
-    // and testing the WebSocket connection to verify it works.
-    return Promise.resolve({
-        id: 0,
-        name: input.name,
-        websocket_url: input.websocket_url,
-        websocket_password: input.websocket_password || null,
-        is_connected: false,
-        last_connected_at: null,
-        created_at: new Date(),
-        updated_at: new Date()
-    } as ObsInstance);
+    // The goal of this handler is to fetch a specific OBS instance by ID
+    // with its current status and detailed information.
+    
+    return null;
 }
 
-export const updateObsInstance = async (input: UpdateObsInstanceInput): Promise<ObsInstance> => {
+export async function updateObsInstance(input: UpdateObsInstanceInput): Promise<ObsInstance> {
     // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is updating OBS instance configuration
-    // and re-testing connection if URL or password changed.
-    return Promise.resolve({
+    // The goal of this handler is to update an existing OBS instance
+    // and refresh its connection status if URL changes.
+    
+    return {
         id: input.id,
-        name: input.name || 'Updated OBS',
-        websocket_url: input.websocket_url || 'ws://localhost:4455',
-        websocket_password: input.websocket_password || null,
-        is_connected: false,
-        last_connected_at: null,
+        name: 'Updated Instance',
+        websocket_url: 'ws://localhost:4455',
+        profile_name: null,
+        stream_key: null,
+        status: 'disconnected',
+        current_scene: null,
+        is_streaming: false,
         created_at: new Date(),
         updated_at: new Date()
-    } as ObsInstance);
+    } as ObsInstance;
 }
 
-export const deleteObsInstance = async (id: number): Promise<void> => {
+export async function deleteObsInstance(id: number): Promise<{ success: boolean }> {
     // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is deleting an OBS instance configuration
-    // and disconnecting any active WebSocket connections.
-    return Promise.resolve();
+    // The goal of this handler is to delete an OBS instance and all related data
+    // (scenes, sources, schedules) from the database.
+    
+    return { success: true };
 }
 
-export const testObsConnection = async (id: number): Promise<{ connected: boolean; message: string }> => {
+export async function testObsConnection(id: number): Promise<{ connected: boolean; error?: string }> {
     // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is testing the WebSocket connection to a specific
-    // OBS instance and returning connection status with any error messages.
-    return Promise.resolve({
-        connected: false,
-        message: 'Connection test not implemented'
-    });
+    // The goal of this handler is to test the WebSocket connection to an OBS instance
+    // and return the connection status with any error details.
+    
+    return { connected: false, error: 'Connection test not implemented' };
 }
