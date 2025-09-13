@@ -1,22 +1,32 @@
+import { db } from '../db';
+import { obsInstancesTable } from '../db/schema';
 import { type CreateObsInstanceInput, type UpdateObsInstanceInput, type ObsInstance } from '../schema';
 
 export async function createObsInstance(input: CreateObsInstanceInput): Promise<ObsInstance> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to create a new OBS instance in the database
-    // and attempt to connect to it via WebSocket to verify connectivity.
-    
-    return {
-        id: 0, // Placeholder ID
-        name: input.name,
-        websocket_url: input.websocket_url,
-        profile_name: input.profile_name || null,
-        stream_key: input.stream_key || null,
-        status: 'disconnected', // Initial status
-        current_scene: null,
-        is_streaming: false,
-        created_at: new Date(),
-        updated_at: new Date()
-    } as ObsInstance;
+    try {
+        // Insert OBS instance record
+        const result = await db.insert(obsInstancesTable)
+            .values({
+                name: input.name,
+                websocket_url: input.websocket_url,
+                profile_name: input.profile_name || null,
+                stream_key: input.stream_key || null,
+                status: 'disconnected' as const, // Initial status
+                current_scene: null,
+                is_streaming: false
+            })
+            .returning()
+            .execute();
+
+        const obsInstance = result[0];
+        return {
+            ...obsInstance,
+            status: obsInstance.status as 'connected' | 'disconnected' | 'error'
+        };
+    } catch (error) {
+        console.error('OBS instance creation failed:', error);
+        throw error;
+    }
 }
 
 export async function getObsInstances(): Promise<ObsInstance[]> {

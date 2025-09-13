@@ -1,11 +1,24 @@
+import { db } from '../db';
+import { sourcesTable } from '../db/schema';
+import { eq } from 'drizzle-orm';
 import { type Source } from '../schema';
 
 export async function getSourcesByScene(sceneId: number): Promise<Source[]> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to fetch all sources for a specific scene
-    // from the database, including their enabled/disabled status and settings.
-    
-    return [];
+    try {
+        const results = await db.select()
+            .from(sourcesTable)
+            .where(eq(sourcesTable.scene_id, sceneId))
+            .execute();
+
+        return results.map(source => ({
+            ...source,
+            // Convert JSON settings back to proper type
+            settings: source.settings || null
+        }));
+    } catch (error) {
+        console.error('Failed to fetch sources by scene:', error);
+        throw error;
+    }
 }
 
 export async function refreshSourcesFromObs(obsInstanceId: number): Promise<Source[]> {

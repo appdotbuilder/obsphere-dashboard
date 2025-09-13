@@ -1,13 +1,23 @@
 import { type AuthInput, type SuccessResponse } from '../schema';
 
-export async function authenticate(input: AuthInput): Promise<SuccessResponse> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to authenticate users with username "kedar" and password "1".
-    // Should validate credentials and return success status.
-    
+export const authenticate = async (input: AuthInput): Promise<SuccessResponse> => {
+  try {
+    // Validate credentials against hardcoded values
+    // Username: "kedar", Password: "1"
     if (input.username === 'kedar' && input.password === '1') {
-        return { success: true, message: 'Authentication successful' };
+      return { 
+        success: true, 
+        message: 'Authentication successful' 
+      };
     }
-    
-    return { success: false, message: 'Invalid credentials' };
-}
+
+    // Return failure for invalid credentials
+    return { 
+      success: false, 
+      message: 'Invalid credentials' 
+    };
+  } catch (error) {
+    console.error('Authentication failed:', error);
+    throw error;
+  }
+};

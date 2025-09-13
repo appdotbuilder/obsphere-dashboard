@@ -1,24 +1,46 @@
+import { db } from '../db';
+import { schedulesTable, obsInstancesTable } from '../db/schema';
+import { eq } from 'drizzle-orm';
 import { type CreateScheduleInput, type UpdateScheduleInput, type Schedule, type SchedulePreview } from '../schema';
 
 export async function createSchedule(input: CreateScheduleInput): Promise<Schedule> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to create a new streaming schedule in the database
-    // and set up the automated scheduling system for the specified times.
-    
-    return {
-        id: 0, // Placeholder ID
+  try {
+    // Verify that the referenced OBS instance exists
+    const obsInstance = await db.select()
+      .from(obsInstancesTable)
+      .where(eq(obsInstancesTable.id, input.obs_instance_id))
+      .execute();
+
+    if (obsInstance.length === 0) {
+      throw new Error(`OBS instance with id ${input.obs_instance_id} not found`);
+    }
+
+    // Insert the schedule record
+    const result = await db.insert(schedulesTable)
+      .values({
         name: input.name,
         obs_instance_id: input.obs_instance_id,
         start_time: input.start_time,
         end_time: input.end_time,
-        days_of_week: input.days_of_week,
-        is_active: true,
+        days_of_week: input.days_of_week, // jsonb column handles array directly
         is_one_time: input.is_one_time || false,
         execution_date: input.execution_date || null,
-        video_start_timestamp: input.video_start_timestamp || null,
-        created_at: new Date(),
-        updated_at: new Date()
-    } as Schedule;
+        video_start_timestamp: input.video_start_timestamp || null
+      })
+      .returning()
+      .execute();
+
+    const schedule = result[0];
+    
+    // Return schedule directly - jsonb returns proper array type
+    return {
+      ...schedule,
+      days_of_week: schedule.days_of_week as number[]
+    };
+  } catch (error) {
+    console.error('Schedule creation failed:', error);
+    throw error;
+  }
 }
 
 export async function getSchedules(): Promise<Schedule[]> {
