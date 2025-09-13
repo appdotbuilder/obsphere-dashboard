@@ -1,212 +1,207 @@
 import { z } from 'zod';
 
-// Enums for stream status and view modes
-export const streamStatusSchema = z.enum(['streaming', 'idle', 'starting', 'stopping', 'error']);
-export const viewModeSchema = z.enum(['cards', 'list']);
-export const scheduledStopTypeSchema = z.enum(['duration', 'specific_time']);
-
-// YouTube Live Stream schema
-export const liveStreamSchema = z.object({
-  id: z.number(),
-  youtube_stream_id: z.string(),
-  title: z.string(),
-  description: z.string().nullable(),
-  tags: z.string().nullable(), // JSON string of tags array
-  thumbnail_url: z.string().nullable(),
-  status: streamStatusSchema,
-  viewer_count: z.number().nullable(),
-  stream_key: z.string().nullable(),
-  started_at: z.coerce.date().nullable(),
-  ended_at: z.coerce.date().nullable(),
-  duration_seconds: z.number().nullable(),
-  scheduled_end_time: z.coerce.date().nullable(),
-  scheduled_stop_type: scheduledStopTypeSchema.nullable(),
-  obs_instance_id: z.number().nullable(),
-  created_at: z.coerce.date(),
-  updated_at: z.coerce.date()
-});
-
-export type LiveStream = z.infer<typeof liveStreamSchema>;
-
-// Input schemas for live streams
-export const createLiveStreamInputSchema = z.object({
-  title: z.string().min(1),
-  description: z.string().nullable(),
-  tags: z.array(z.string()).optional().transform(tags => tags ? JSON.stringify(tags) : null),
-  obs_instance_id: z.number().optional()
-});
-
-export type CreateLiveStreamInput = z.infer<typeof createLiveStreamInputSchema>;
-
-export const updateLiveStreamInputSchema = z.object({
-  id: z.number(),
-  title: z.string().min(1).optional(),
-  description: z.string().nullable().optional(),
-  tags: z.array(z.string()).optional().transform(tags => tags ? JSON.stringify(tags) : null),
-  scheduled_end_time: z.coerce.date().nullable().optional(),
-  scheduled_stop_type: scheduledStopTypeSchema.nullable().optional()
-});
-
-export type UpdateLiveStreamInput = z.infer<typeof updateLiveStreamInputSchema>;
-
-export const bulkUpdateLiveStreamInputSchema = z.object({
-  stream_ids: z.array(z.number()),
-  title: z.string().min(1).optional(),
-  description: z.string().nullable().optional(),
-  tags: z.array(z.string()).optional().transform(tags => tags ? JSON.stringify(tags) : null)
-});
-
-export type BulkUpdateLiveStreamInput = z.infer<typeof bulkUpdateLiveStreamInputSchema>;
-
 // OBS Instance schema
 export const obsInstanceSchema = z.object({
   id: z.number(),
   name: z.string(),
-  websocket_url: z.string(),
-  websocket_password: z.string().nullable(),
+  websocket_url: z.string().url(),
   is_connected: z.boolean(),
-  last_connected_at: z.coerce.date().nullable(),
+  current_scene: z.string().nullable(),
+  is_streaming: z.boolean(),
+  stream_key: z.string().nullable(),
+  profile_name: z.string().nullable(),
   created_at: z.coerce.date(),
-  updated_at: z.coerce.date()
+  updated_at: z.coerce.date(),
 });
 
 export type ObsInstance = z.infer<typeof obsInstanceSchema>;
 
+// Input schema for creating OBS instances
 export const createObsInstanceInputSchema = z.object({
   name: z.string().min(1),
   websocket_url: z.string().url(),
-  websocket_password: z.string().nullable()
+  stream_key: z.string().nullable().optional(),
+  profile_name: z.string().nullable().optional(),
 });
 
 export type CreateObsInstanceInput = z.infer<typeof createObsInstanceInputSchema>;
 
+// Input schema for updating OBS instances
 export const updateObsInstanceInputSchema = z.object({
   id: z.number(),
-  name: z.string().min(1).optional(),
+  name: z.string().optional(),
   websocket_url: z.string().url().optional(),
-  websocket_password: z.string().nullable().optional()
+  is_connected: z.boolean().optional(),
+  current_scene: z.string().nullable().optional(),
+  is_streaming: z.boolean().optional(),
+  stream_key: z.string().nullable().optional(),
+  profile_name: z.string().nullable().optional(),
 });
 
 export type UpdateObsInstanceInput = z.infer<typeof updateObsInstanceInputSchema>;
 
-// Stream Template schema
-export const streamTemplateSchema = z.object({
+// OBS Source schema
+export const obsSourceSchema = z.object({
+  id: z.number(),
+  obs_instance_id: z.number(),
+  name: z.string(),
+  type: z.string(),
+  enabled: z.boolean(),
+  scene_name: z.string(),
+  created_at: z.coerce.date(),
+  updated_at: z.coerce.date(),
+});
+
+export type ObsSource = z.infer<typeof obsSourceSchema>;
+
+// OBS Scene schema
+export const obsSceneSchema = z.object({
+  id: z.number(),
+  obs_instance_id: z.number(),
+  name: z.string(),
+  is_current: z.boolean(),
+  created_at: z.coerce.date(),
+  updated_at: z.coerce.date(),
+});
+
+export type ObsScene = z.infer<typeof obsSceneSchema>;
+
+// Schedule schema
+export const scheduleSchema = z.object({
   id: z.number(),
   name: z.string(),
-  title_template: z.string(),
-  description_template: z.string().nullable(),
-  default_tags: z.string().nullable(), // JSON string of tags array
-  is_default: z.boolean(),
+  obs_instance_id: z.number(),
+  start_time: z.coerce.date(),
+  end_time: z.coerce.date(),
+  is_active: z.boolean(),
+  stream_key: z.string().nullable(),
+  profile_name: z.string().nullable(),
+  video_start_position: z.number().nullable(), // in seconds
+  repeat_type: z.enum(['once', 'daily', 'weekly']),
+  repeat_days: z.array(z.number()).nullable(), // 0-6 for Sunday-Saturday
   created_at: z.coerce.date(),
-  updated_at: z.coerce.date()
+  updated_at: z.coerce.date(),
 });
 
-export type StreamTemplate = z.infer<typeof streamTemplateSchema>;
+export type Schedule = z.infer<typeof scheduleSchema>;
 
-export const createStreamTemplateInputSchema = z.object({
+// Input schema for creating schedules
+export const createScheduleInputSchema = z.object({
   name: z.string().min(1),
-  title_template: z.string().min(1),
-  description_template: z.string().nullable(),
-  default_tags: z.array(z.string()).optional().transform(tags => tags ? JSON.stringify(tags) : null),
-  is_default: z.boolean().default(false)
+  obs_instance_id: z.number(),
+  start_time: z.coerce.date(),
+  end_time: z.coerce.date(),
+  stream_key: z.string().nullable().optional(),
+  profile_name: z.string().nullable().optional(),
+  video_start_position: z.number().nullable().optional(),
+  repeat_type: z.enum(['once', 'daily', 'weekly']).default('once'),
+  repeat_days: z.array(z.number().min(0).max(6)).nullable().optional(),
 });
 
-export type CreateStreamTemplateInput = z.infer<typeof createStreamTemplateInputSchema>;
+export type CreateScheduleInput = z.infer<typeof createScheduleInputSchema>;
 
-export const updateStreamTemplateInputSchema = z.object({
+// Input schema for updating schedules
+export const updateScheduleInputSchema = z.object({
   id: z.number(),
-  name: z.string().min(1).optional(),
-  title_template: z.string().min(1).optional(),
-  description_template: z.string().nullable().optional(),
-  default_tags: z.array(z.string()).optional().transform(tags => tags ? JSON.stringify(tags) : null),
-  is_default: z.boolean().optional()
+  name: z.string().optional(),
+  obs_instance_id: z.number().optional(),
+  start_time: z.coerce.date().optional(),
+  end_time: z.coerce.date().optional(),
+  is_active: z.boolean().optional(),
+  stream_key: z.string().nullable().optional(),
+  profile_name: z.string().nullable().optional(),
+  video_start_position: z.number().nullable().optional(),
+  repeat_type: z.enum(['once', 'daily', 'weekly']).optional(),
+  repeat_days: z.array(z.number().min(0).max(6)).nullable().optional(),
 });
 
-export type UpdateStreamTemplateInput = z.infer<typeof updateStreamTemplateInputSchema>;
+export type UpdateScheduleInput = z.infer<typeof updateScheduleInputSchema>;
 
-// Application Settings schema
-export const appSettingsSchema = z.object({
+// Day Schedule schema for saving/loading entire day schedules
+export const dayScheduleSchema = z.object({
   id: z.number(),
-  youtube_api_key: z.string().nullable(),
-  api_quota_used: z.number(),
-  api_quota_limit: z.number(),
-  api_quota_reset_date: z.coerce.date().nullable(),
-  password_hash: z.string().nullable(),
-  default_view_mode: viewModeSchema,
-  auto_refresh_interval: z.number(), // seconds
+  name: z.string(), // e.g., "Monday Schedule"
+  schedule_data: z.string(), // JSON stringified schedule data
   created_at: z.coerce.date(),
-  updated_at: z.coerce.date()
+  updated_at: z.coerce.date(),
 });
 
-export type AppSettings = z.infer<typeof appSettingsSchema>;
+export type DaySchedule = z.infer<typeof dayScheduleSchema>;
 
-export const updateSettingsInputSchema = z.object({
-  youtube_api_key: z.string().nullable().optional(),
-  password: z.string().min(6).optional(), // Will be hashed before storage
-  default_view_mode: viewModeSchema.optional(),
-  auto_refresh_interval: z.number().min(5).max(300).optional() // 5 seconds to 5 minutes
+// Input schema for creating day schedules
+export const createDayScheduleInputSchema = z.object({
+  name: z.string().min(1),
+  schedule_data: z.string(),
 });
 
-export type UpdateSettingsInput = z.infer<typeof updateSettingsInputSchema>;
+export type CreateDayScheduleInput = z.infer<typeof createDayScheduleInputSchema>;
 
-// Authentication schema
+// Notification Log schema
+export const notificationLogSchema = z.object({
+  id: z.number(),
+  schedule_id: z.number(),
+  notification_type: z.enum(['pre_start', 'start', 'pre_stop', 'stop']),
+  message: z.string(),
+  sent_at: z.coerce.date(),
+  telegram_sent: z.boolean(),
+  created_at: z.coerce.date(),
+});
+
+export type NotificationLog = z.infer<typeof notificationLogSchema>;
+
+// User session schema (simple auth)
+export const userSessionSchema = z.object({
+  id: z.number(),
+  username: z.string(),
+  session_token: z.string(),
+  expires_at: z.coerce.date(),
+  created_at: z.coerce.date(),
+});
+
+export type UserSession = z.infer<typeof userSessionSchema>;
+
+// Auth input schemas
 export const loginInputSchema = z.object({
-  password: z.string()
+  username: z.string(),
+  password: z.string(),
 });
 
 export type LoginInput = z.infer<typeof loginInputSchema>;
 
-export const authResponseSchema = z.object({
-  success: z.boolean(),
-  token: z.string().nullable(),
-  message: z.string().nullable()
+// OBS Control input schemas
+export const obsControlInputSchema = z.object({
+  obs_instance_id: z.number(),
+  action: z.enum(['start_stream', 'stop_stream', 'switch_scene', 'toggle_source']),
+  scene_name: z.string().optional(),
+  source_name: z.string().optional(),
 });
 
-export type AuthResponse = z.infer<typeof authResponseSchema>;
+export type ObsControlInput = z.infer<typeof obsControlInputSchema>;
 
-// Stream action schemas
-export const startStreamInputSchema = z.object({
-  template_id: z.number().optional(),
-  title: z.string().min(1),
-  description: z.string().nullable(),
-  tags: z.array(z.string()).optional(),
-  obs_instance_id: z.number().optional()
+// Schedule preview schema
+export const schedulePreviewSchema = z.object({
+  affected_streams: z.array(z.object({
+    obs_instance_id: z.number(),
+    obs_instance_name: z.string(),
+    current_schedule: z.string().nullable(),
+    new_schedule: z.string(),
+  })),
+  conflicts: z.array(z.object({
+    schedule_id: z.number(),
+    conflict_description: z.string(),
+    suggested_resolution: z.string(),
+  })),
+  total_changes: z.number(),
 });
 
-export type StartStreamInput = z.infer<typeof startStreamInputSchema>;
+export type SchedulePreview = z.infer<typeof schedulePreviewSchema>;
 
-export const stopStreamInputSchema = z.object({
-  id: z.number()
+// Bulk schedule operation input
+export const bulkScheduleOperationInputSchema = z.object({
+  operation: z.enum(['apply', 'copy', 'delete']),
+  source_schedule_ids: z.array(z.number()).optional(),
+  target_date: z.coerce.date().optional(),
+  schedule_data: z.array(createScheduleInputSchema).optional(),
 });
 
-export type StopStreamInput = z.infer<typeof stopStreamInputSchema>;
-
-export const scheduleStreamStopInputSchema = z.object({
-  id: z.number(),
-  stop_type: scheduledStopTypeSchema,
-  duration_minutes: z.number().min(1).optional(), // For duration type
-  specific_time: z.coerce.date().optional() // For specific_time type
-});
-
-export type ScheduleStreamStopInput = z.infer<typeof scheduleStreamStopInputSchema>;
-
-// API Quota tracking schema
-export const apiQuotaUsageSchema = z.object({
-  current_usage: z.number(),
-  limit: z.number(),
-  reset_date: z.coerce.date().nullable(),
-  percentage_used: z.number()
-});
-
-export type ApiQuotaUsage = z.infer<typeof apiQuotaUsageSchema>;
-
-// Dashboard stats schema
-export const dashboardStatsSchema = z.object({
-  active_streams: z.number(),
-  total_viewers: z.number(),
-  connected_obs_instances: z.number(),
-  api_quota_percentage: z.number(),
-  streams_today: z.number()
-});
-
-export type DashboardStats = z.infer<typeof dashboardStatsSchema>;
+export type BulkScheduleOperationInput = z.infer<typeof bulkScheduleOperationInputSchema>;
